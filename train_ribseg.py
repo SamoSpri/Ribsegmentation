@@ -2,32 +2,37 @@
 Author: Benny
 Date: Nov 2019
 """
-import argparse
+import argparse #사용자가 입력한 명령행의 인자를 파싱한 후 인자 값에 다라 적당한 동작을 수행. 이처럼 명령행의 인자를 파싱할때 사용하는 모듈이 바로 argparse.
+#파싱: 프로그램을 compile하는 과정에서 특정 프로그래밍 언어가 제시하는 문법을 잘 지켜서 작성하였는지 compiler가 검사하는 것
+#파싱: 주어진 정보를 내가 원하는 대로 가공하여 서버에서 원하는 때 불러올 수 있도록 하는 것, 어떤 data를 원하는 form으로 만들어 내는 것
 import os
 from data_utils.RibFracDataLoader_1cls import PartNormalDataset
 import data_utils.data_trans as d_utils
 import torchvision
 import torch
-import datetime
-import logging
+import datetime #날짜와 시간을 조작하는 클래스 제공
+import logging #현재 프로그램이 어떤 상태를 가지고 있는지, 외부 출력을 하게 만들어서 개발자 등이 눈으로 직접 확인하는 것.
 from pathlib import Path
-import sys
+import sys 
 import importlib
 import shutil
 from tqdm import tqdm
 import provider
 import numpy as np
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) #절대 경로 반환 #__file__은 python의 예약어로, 실행되는 스크립트 파일명을 나타낸다.
+#aspath의 argument는 해당 경로에 실제로 파일이 존재해야만 하는 것은 아니다. 임의의 문자열을 넣어도 해당 경로를 반환해준다.
 ROOT_DIR = BASE_DIR
-sys.path.append(os.path.join(ROOT_DIR, 'models'))
+sys.path.append(os.path.join(ROOT_DIR, 'models')) #경로 합치기 # https://devbruce.github.io/python/py-39-path+function/
 
 
 # seg_classes = {'rib':[0,1]}
 # we adapted the PointNet++ code from https://github.com/yanx27/Pointnet_Pointnet2_pytorch.git, 
 # to keep the consistency, we simply let the number of classes be the same as the source code.
 # For experiments, the only classes used will be 'rib': 0 ,1.
-
+#[]=> array : 배열의 원소에 접근할때 사용
+#()=> tuple : 딕셔너리와 비슷하지만 튜플은 이미 생성된 원소를 제거하거나, 변경할 수 없다. 또 튜플은 원소의 타입이 같을때 사용 
+#{}=> dictionary : key에 대응하는 value 을 할당하거나 value에 접근할때 사용
 seg_classes = {'rib':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24],'Earphone': [44, 45], 'Motorbike': [30, 31, 32, 33, 34, 35], 'Rocket': [41, 42, 43],
                             'Car': [29], 'Laptop': [28 ], 'Cap': [26], 'Skateboard': [46],
                             'Mug': [36], 'Guitar': [39, 40], 'Bag': [27], 'Lamp': [25],
@@ -35,7 +40,7 @@ seg_classes = {'rib':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22
                             'Chair': [37], 'Knife': [49]}
 
 
-seg_label_to_cat = {} # {0:Airplane, 1:Airplane, ...49:Table}
+seg_label_to_cat = {} # {0:Airplane, 1:Airplane, ...49:Table} # 빈 딕셔너리 생성 시 {} 사용
 for cat in seg_classes.keys():
     for label in seg_classes[cat]:
         seg_label_to_cat[label] = cat
