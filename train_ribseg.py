@@ -15,7 +15,7 @@ import logging #현재 프로그램이 어떤 상태를 가지고 있는지, 외
 from pathlib import Path
 import sys 
 import importlib
-import shutil
+import shutil #shutil 모듈은 파일 모음에 대한 여러가지 고수준 연산을 제공합니다. 특히, 파일 복사와 삭제를 지원하는 함수가 제공됩니다.
 from tqdm import tqdm
 import provider
 import numpy as np
@@ -41,20 +41,30 @@ seg_classes = {'rib':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22
 
 
 seg_label_to_cat = {} # {0:Airplane, 1:Airplane, ...49:Table} # 빈 딕셔너리 생성 시 {} 사용
-for cat in seg_classes.keys():
+for cat in seg_classes.keys(): # for in 함수
     for label in seg_classes[cat]:
         seg_label_to_cat[label] = cat
 
 def to_categorical(y, num_classes):
     """ 1-hot encodes a tensor """
     new_y = torch.eye(num_classes)[y.cpu().data.numpy(),]
+    #torch.eye() : 사선 방향이 1인 a x a 텐서 생성, 대각선에 1이 있고 다른 곳에 0이 있는 2차원 텐서를 반환
+    #.data : Variable에서 값을 얻는 attribute # cpu(): GPU 메모리에 올려져 있는 tensor를 cpu 메모리로 복사하는 method
+    # .numpy() tensor를 numpy로 변환하여 반환. 이때 저장공간을 공유하기 때문에 하나를 변경하면 다른 하나도 변경된다.
     if (y.is_cuda):
-        return new_y.cuda()
+        return new_y.cuda() #cuda: nvidia에서 개발한 gpu 개발 툴 : 컴퓨터 연산을 위해
     return new_y
 
 
-def parse_args():
-    parser = argparse.ArgumentParser('Model')
+def parse_args(): #인자: 매개변수
+    parser = argparse.ArgumentParser('Model') #argument parser 객체 생성= argument parser 객체는 명령행을 파이썬 데이터 형으로 파싱하는 데 필요한 모든 정보를 생성
+    #argument parser에 프로그램 인자에 대한 정보를 채우려면 add_argument() 메서드를 호출하면 된다.=> 이 호출은 argument parser에게 명령행의 문자열을 객체로 변환하는 방법을 알려준다
+    #이 정보는 저장되고 parse_args()가 호출될 때 사용된다.
+    #argparse 라이브러리를 사용하여 model, batch_size, epoch 등 설정-> 프로그램에 필요한 인자들을 정의
+    # 인자의 앞에 --,-가 붙어 있으면 optional 인자(선택형 인자), 붙어있지 않으면 positional 인자(위치형 인자)이다. 
+    #위치형 인자는 필수적으로 입력해야하는 인자이며ㅡ 선택형 인자도 required=True를 통해 필수로 입력하게 끔 지정할 수 있다.
+    #typedml default값은 str이며, default=를 통해 사용자가 옵션을 주지 않았을 때 기본적으로 들어가는 값을 지정하는 곳이다.
+    #help: 인자에대한 설명을 쓴다.
     parser.add_argument('--model', type=str, default='pointnet2_part_seg_msg', help='model name [default: pointnet2_part_seg_msg]')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch Size during training [default: 16]')
     parser.add_argument('--epoch',  default=251, type=int, help='Epoch to run [default: 251]')
@@ -68,20 +78,21 @@ def parse_args():
     parser.add_argument('--step_size', type=int,  default=20, help='Decay step for lr decay [default: every 20 epochs]')
     parser.add_argument('--lr_decay', type=float,  default=0.5, help='Decay rate for lr decay [default: 0.5]')
 
-    return parser.parse_args()
+    return parser.parse_args() #인자 파싱하기 => argument parser는 parse_args()메서드를 통해 인자를 파싱합니다. 이 메서드는 명령행을 검사하고 각 인자를 적절한 형으로 변환한다음
+  #적절한 액션을 호출합니다.
 
 def main(args):
     def log_string(str):
         logger.info(str)
         print(str)
 
-    '''HYPER PARAMETER'''
+    '''HYPER PARAMETER''' #gpu에 메모리 할당
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     '''CREATE DIR'''
     timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     experiment_dir = Path('./log/')
-    experiment_dir.mkdir(exist_ok=True)
+    experiment_dir.mkdir(exist_ok=True) #폴더 생성경로에 폴더가 없을 경우 자동으로 생성
     experiment_dir = experiment_dir.joinpath('part_seg')
     experiment_dir.mkdir(exist_ok=True)
     if args.log_dir is None:
@@ -108,7 +119,7 @@ def main(args):
 
     root = './data/pn/'
 
-    transforms = torchvision.transforms.Compose(
+    transforms = torchvision.transforms.Compose( #다양한 이미지 변환 기능들을 제공해준다.
         [
             d_utils.PointcloudToTensor(),
             # d_utils.PointcloudRotate(axis=np.array([1, 0, 0])),
@@ -119,35 +130,45 @@ def main(args):
     )
 
     TRAIN_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='trainval',transforms=transforms, normal_channel=args.normal)
-    trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=args.batch_size,shuffle=True, num_workers=0)
+    trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=args.batch_size,shuffle=True, num_workers=0) #shuffle=true 무작위 샘플링
     TEST_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='test', transforms=None,normal_channel=args.normal)
     testDataLoader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=args.batch_size,shuffle=False, num_workers=0)
+    #batch_size= 배치의 크기 : 데이터셋에 50개의 데이터가 있고 batch_size가 10이라면 5번의 iteration만 지나면 모든 데이터를 볼 수 있다.
+    #shuffle: 데이터를 DataLoader에서 섞어서 사용하겠는지를 설정할 수 있다.
+    #num_workers: 데이터 로딩에 사용하는 subprocess개수이다.=> 기본 값이 0인데 이는 data가 mainprocess로 불러오는 것을 의미한다.
     log_string("The number of training data is: %d" % len(TRAIN_DATASET))
     log_string("The number of test data is: %d" %  len(TEST_DATASET))
-    num_classes = 16 #1
+    num_classes = 16 #1 #최종 출력 클래스의 크기
     num_part = 50 #2
     '''MODEL LOADING'''
-    MODEL = importlib.import_module(args.model)
+    MODEL = importlib.import_module(args.model)#모듈을 임포트합니다. import_module()함수는 importlib.__import__() 주위를 감싸는 단순화 wrapper 역할
     shutil.copy('models/%s.py' % args.model, str(experiment_dir))
     shutil.copy('models/pointnet_util.py', str(experiment_dir))
 
     classifier = MODEL.get_model(num_part, normal_channel=args.normal).cuda()
     criterion = MODEL.get_loss().cuda()
 
-
+#가중치 초기화 #모델 초기화
     def weights_init(m):
         classname = m.__class__.__name__
-        if classname.find('Conv2d') != -1:
-            torch.nn.init.xavier_normal_(m.weight.data)
+        if classname.find('Conv2d') != -1: #find 함수: "찾을 문자" 혹은 "찾을 문자열"이 존재하는지 확인하고, 찾는 문자가 존재한다면 해당 위치의 index를 반환/ 존재x -1반환
+            torch.nn.init.xavier_normal_(m.weight.data) #
             torch.nn.init.constant_(m.bias.data, 0.0)
         elif classname.find('Linear') != -1:
-            torch.nn.init.xavier_normal_(m.weight.data)
-            torch.nn.init.constant_(m.bias.data, 0.0)
-
-    try:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
-        start_epoch = checkpoint['epoch']
-        classifier.load_state_dict(checkpoint['model_state_dict'])
+            torch.nn.init.xavier_normal_(m.weight.data) #xavier 초기화는 고정된 표준편차를 사용하지 않다는 특징이 있다.
+            #이전 은닉층의 노드수(fan_in)과 현재 은닉층의 노드(fan_out)을 고려하여 만들어진다. 활성값이 고르게 분포한다.
+            torch.nn.init.constant_(m.bias.data, 0.0)#torch.nn.init.constant_(tensor,val) tensor: n차원 val: the value to fill the tensor with
+#try except: 예외처리를 하려면 다음과 같이 try에 실행할 코드를 넣고 except에 예외가 발생했을 때 처리하는 코드를 넣는다.
+    try: 
+        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth') #torch.load: pickle을 사용하여 저장된 객체 파일들을 역직렬화하여 메모리에 올립니다.
+      #pickle 모듈은 python 객체 구조를 직렬화 및 역직렬화하기 위한 바이너리 프로토콜을 구현한다. #pytorch에서 학습한 모델 저장 및 불러오기
+      
+      #pytorch의 모델은 직렬화와 역직렬화를 통해 객체를 저장하고 불러올 수 있다.
+      #모델을 저장하는 방법은 python의 피클을 활용하여  파있너 객체 구조를 바이너리 프로토콜로 직렬화 합니다.
+      #모델을 불러오는 방법은 저장된 객체 파일을 역직렬화하여 현재 프로세스의 메모리에 업로드합니다.
+    
+        start_epoch = checkpoint['epoch']  #checkpoint는 모델이 사용한 모든 매개변수의 정확한 값을 캡처한다.
+        classifier.load_state_dict(checkpoint['model_state_dict'])#모델 불러오기
         log_string('Use pretrain model')
     except:
         log_string('No existing model, starting training from scratch...')
@@ -158,15 +179,15 @@ def main(args):
         optimizer = torch.optim.Adam(
             classifier.parameters(),
             lr=args.learning_rate,
-            betas=(0.9, 0.999),
-            eps=1e-08,
-            weight_decay=args.decay_rate
+            betas=(0.9, 0.999), #그레디언트와 그 제곱의 실행 평균을 계산하는데 사용되는 계수(기본값) #기울기 평균을 계산하는 매개변수
+            eps=1e-08, #수치 안정성을 개선하기 위해 분모에 추가된 용어(기본값) 
+            weight_decay=args.decay_rate #가중치 감소=> weight_decay의 값이 커질수록 가중치 값이 작아지고, 오버피팅을 해소할 수 있다. weight_decay값을 너무 크게하면 언더피팅 발생
         )
     else:
         optimizer = torch.optim.SGD(classifier.parameters(), lr=args.learning_rate, momentum=0.9)
 
     def bn_momentum_adjust(m, momentum):
-        if isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm1d):
+        if isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm1d): # 조건들 중 하나만 True여도 if문 코드가 실행
             m.momentum = momentum
 
     LEARNING_RATE_CLIP = 1e-5
