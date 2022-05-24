@@ -93,14 +93,14 @@ def main(args):
     timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     experiment_dir = Path('./log/')
     experiment_dir.mkdir(exist_ok=True) #폴더 생성경로에 폴더가 없을 경우 자동으로 생성
-    experiment_dir = experiment_dir.joinpath('part_seg')
+    experiment_dir = experiment_dir.joinpath('part_seg') #경로 이동: 디렉토리 트리 내에서 이동할 수 있도록 어떤 path 객체를 기준으로한 다른 디렉토리나 파일을 표시하는 pat객체 생성
     experiment_dir.mkdir(exist_ok=True)
     if args.log_dir is None:
         experiment_dir = experiment_dir.joinpath(timestr)
     else:
         experiment_dir = experiment_dir.joinpath(args.log_dir)
     experiment_dir.mkdir(exist_ok=True)
-    checkpoints_dir = experiment_dir.joinpath('checkpoints/')
+    checkpoints_dir = experiment_dir.joinpath('checkpoints/') 
     checkpoints_dir.mkdir(exist_ok=True)
     log_dir = experiment_dir.joinpath('logs/')
     log_dir.mkdir(exist_ok=True)
