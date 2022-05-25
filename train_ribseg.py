@@ -107,10 +107,11 @@ def main(args):
 
     '''LOG'''
     args = parse_args()
-    logger = logging.getLogger("Model")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler = logging.FileHandler('%s/%s.txt' % (log_dir, args.model))
+    logger = logging.getLogger("Model") #자신만의 특정한 로거를 따로 사용
+    logger.setLevel(logging.INFO) #setLevel 메소드를 통해서 INFO 레벨 이상은 출력하도록 설정
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')# 이 메세지가 언제쓰여졌는지, 어떤 모듈에서 쓰여졌는지 등 기타 정보를 같이 출력할때
+    #asctime: 시간 , name:로거이름, levelname:로깅레벨, message:메세지
+    file_handler = logging.FileHandler('%s/%s.txt' % (log_dir, args.model))#logging.FileHandler 클래스를 통해 객체를 만들어서 나의 로거에 추가
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -119,9 +120,10 @@ def main(args):
 
     root = './data/pn/'
 
-    transforms = torchvision.transforms.Compose( #다양한 이미지 변환 기능들을 제공해준다.
-        [
-            d_utils.PointcloudToTensor(),
+    transforms = torchvision.transforms.Compose( #다양한 이미지 변환 기능들을 제공해준다. 
+   #data_utils에 있는 코드
+      [
+            d_utils.PointcloudToTensor(), 
             # d_utils.PointcloudRotate(axis=np.array([1, 0, 0])),
             d_utils.PointcloudScale(),
             d_utils.PointcloudTranslate(),
@@ -129,10 +131,10 @@ def main(args):
         ]
     )
 
-    TRAIN_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='trainval',transforms=transforms, normal_channel=args.normal)
+    TRAIN_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='trainval',transforms=transforms, normal_channel=args.normal)#transforms
     trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=args.batch_size,shuffle=True, num_workers=0) #shuffle=true 무작위 샘플링
-    TEST_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='test', transforms=None,normal_channel=args.normal)
-    testDataLoader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=args.batch_size,shuffle=False, num_workers=0)
+    TEST_DATASET = PartNormalDataset(root = root, npoints=args.npoint, split='test', transforms=None,normal_channel=args.normal) #parser: npoint, normal transforms(x)
+    testDataLoader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=args.batch_size,shuffle=False, num_workers=0) 
     #batch_size= 배치의 크기 : 데이터셋에 50개의 데이터가 있고 batch_size가 10이라면 5번의 iteration만 지나면 모든 데이터를 볼 수 있다.
     #shuffle: 데이터를 DataLoader에서 섞어서 사용하겠는지를 설정할 수 있다.
     #num_workers: 데이터 로딩에 사용하는 subprocess개수이다.=> 기본 값이 0인데 이는 data가 mainprocess로 불러오는 것을 의미한다.
@@ -142,22 +144,23 @@ def main(args):
     num_part = 50 #2
     '''MODEL LOADING'''
     MODEL = importlib.import_module(args.model)#모듈을 임포트합니다. import_module()함수는 importlib.__import__() 주위를 감싸는 단순화 wrapper 역할
-    shutil.copy('models/%s.py' % args.model, str(experiment_dir))
-    shutil.copy('models/pointnet_util.py', str(experiment_dir))
+    shutil.copy('models/%s.py' % args.model, str(experiment_dir)) #shutil 모듈은 파일 모음에 대한 여러가지 고수준 연산을 제공합니다. 특히, 파일 복사와 삭제를 지원하는 함수가 제공됩니다.
+    shutil.copy('models/pointnet_util.py', str(experiment_dir)) #기능: 파일을 복사한다. shutil.copy(src파일 경로, dest 파일(or 폴더)경로) #src 원본 파일 dest 대상파일
 
-    classifier = MODEL.get_model(num_part, normal_channel=args.normal).cuda()
+    classifier = MODEL.get_model(num_part, normal_channel=args.normal).cuda() #TMI: 정의하는 느낌
     criterion = MODEL.get_loss().cuda()
 
 #가중치 초기화 #모델 초기화
     def weights_init(m):
-        classname = m.__class__.__name__
+        classname = m.__class__.__name__# 클래스 이름을 참조한다. 클래스명 m (ex 클래스명.__name__)
         if classname.find('Conv2d') != -1: #find 함수: "찾을 문자" 혹은 "찾을 문자열"이 존재하는지 확인하고, 찾는 문자가 존재한다면 해당 위치의 index를 반환/ 존재x -1반환
-            torch.nn.init.xavier_normal_(m.weight.data) #
+            torch.nn.init.xavier_normal_(m.weight.data) #xavier 초기화는 고정된 표준편차를 사용하지 않다는 특징이 있다.
+            #이전 은닉층의 노드수(fan_in)과 현재 은닉층의 노드(fan_out)을 고려하여 만들어진다. 활성값이 고르게 분포한다
             torch.nn.init.constant_(m.bias.data, 0.0)
         elif classname.find('Linear') != -1:
             torch.nn.init.xavier_normal_(m.weight.data) #xavier 초기화는 고정된 표준편차를 사용하지 않다는 특징이 있다.
             #이전 은닉층의 노드수(fan_in)과 현재 은닉층의 노드(fan_out)을 고려하여 만들어진다. 활성값이 고르게 분포한다.
-            torch.nn.init.constant_(m.bias.data, 0.0)#torch.nn.init.constant_(tensor,val) tensor: n차원 val: the value to fill the tensor with
+            torch.nn.init.constant_(m.bias.data, 0.0) #torch.nn.init.constant_(tensor,val) tensor: n차원 val: the value to fill the tensor with
 #try except: 예외처리를 하려면 다음과 같이 try에 실행할 코드를 넣고 except에 예외가 발생했을 때 처리하는 코드를 넣는다.
     try: 
         checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth') #torch.load: pickle을 사용하여 저장된 객체 파일들을 역직렬화하여 메모리에 올립니다.
@@ -170,7 +173,7 @@ def main(args):
         start_epoch = checkpoint['epoch']  #checkpoint는 모델이 사용한 모든 매개변수의 정확한 값을 캡처한다.
         classifier.load_state_dict(checkpoint['model_state_dict'])#모델 불러오기
         log_string('Use pretrain model')
-    except:
+    except: #TMI 모델을 가지고 있지 않으므로 시작할 수 없어서 START_EPOCH=0
         log_string('No existing model, starting training from scratch...')
         start_epoch = 0
         classifier = classifier.apply(weights_init)
@@ -183,10 +186,11 @@ def main(args):
             eps=1e-08, #수치 안정성을 개선하기 위해 분모에 추가된 용어(기본값) 
             weight_decay=args.decay_rate #가중치 감소=> weight_decay의 값이 커질수록 가중치 값이 작아지고, 오버피팅을 해소할 수 있다. weight_decay값을 너무 크게하면 언더피팅 발생
         )
-    else:
+    else: #TMI: Adam이 안되면 SGD 최적화
         optimizer = torch.optim.SGD(classifier.parameters(), lr=args.learning_rate, momentum=0.9)
 
-    def bn_momentum_adjust(m, momentum):
+    def bn_momentum_adjust(m, momentum): #isinstance(확인하고자하는 데이터 값, 확인하고자 하는 데이터 타입)=>isinstance(인스턴스, 데이터나 클래스타입)
+      #첫번째 매개변수: 확인하고자하는 데이터의 값, 객체, 인스턴스 #두 번째 매개변수 : 확인하고자 하는 데이터타입, 클래스 #반환값: 인스턴스와 타입이 같으면 True 아니면 False
         if isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm1d): # 조건들 중 하나만 True여도 if문 코드가 실행
             m.momentum = momentum
 
