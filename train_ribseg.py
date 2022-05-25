@@ -243,17 +243,22 @@ def main(args):
             #non-contiguous Tensor 객체의 경우 주소값 연속성이 불변인 것을 해결해주는 contiguous()를 사용하여 새로운 메모리 공간에 데이터를 복사하여 
             #주소값 연속성을 가변적이게 만들어주는 것.-> contiguous()결과가 원본과 다른 새로운 주소로 할당된것을 확인할 수 있다.
             #contiguous함수로 새로운 메모리에 할당하여 contiguous Tensor로 변경하면 주소값 재배열이 가능하다.
+            #num_part=50
+            #view(): view는 기존의 데이터와 같은 메모리 공간을 공유하며 stride 크기만 변경하여 보여주기만 다르게한다. 그래서 contiguous해야하만 동작하며, 아닌 경우 에러 발생
             # print('seg_pred',seg_pred.shape)
             target = target.view(-1, 1)[:, 0]
             pred_choice = seg_pred.data.max(1)[1]
-            correct = pred_choice.eq(target.data).cpu().sum()
-            mean_correct.append(correct.item() / (args.batch_size * args.npoint))
-            loss = criterion(seg_pred, target, trans_feat)
-            loss.backward()
-            optimizer.step()
-        train_instance_acc = np.mean(mean_correct)
+            correct = pred_choice.eq(target.data).cpu().sum() #GPU 메모리에 올려져있는 tensor를  cpu메모리로 복사하는 method #eq 같다(비교 메서드)
+            mean_correct.append(correct.item() / (args.batch_size * args.npoint)) #이전 mean_correct=> mean_correct=[] #items()함수를 사용하면 딕셔너리에 있는 키와 값들의
+            #쌍을 얻을 수 있다.
+            loss = criterion(seg_pred, target, trans_feat) #그 전 코드  criterion = MODEL.get_loss().cuda() #trans_feat 13줄 전에 언급 
+            loss.backward() #error를 backpropagation을 하기위해 사용. 기존에 계산된 변화도의 값을 누적시키고 싶지 않다면 기존에 계산된 변화도를 0으로 만드는 작업 필요
+            #backward함수는 어떤 스칼라 값에 대한 출력텐서의 변화도를 전달받고, 동일한 스칼라 값에 대한 입력 텐서의 변화도를 계산
+            optimizer.step() #변화도를 계산한 뒤에는 optimizer.step()을 호출하여 역전파 단계에서 매개변수를 조정
+            #결론: backward로 미분하여 손실함수에 끼친 영향력(변화량)을 구하고 optimizer.step을 통해 손실함수를 최적화하도록 파라미터를 업데이트
+        train_instance_acc = np.mean(mean_correct)#산술 평균
         log_string('Train accuracy is: %.5f' % train_instance_acc)
-
+#------------------Train 정확도 출력--------------------------#
         with torch.no_grad():
             test_metrics = {}
             total_correct = 0
@@ -262,21 +267,23 @@ def main(args):
             total_correct_class = [0 for _ in range(num_part)]
             shape_ious = {cat: [] for cat in seg_classes.keys()}
             seg_label_to_cat = {}  # {0:Airplane, 1:Airplane, ...49:Table}
-            for cat in seg_classes.keys():
-                for label in seg_classes[cat]:
+            for cat in seg_classes.keys(): #seg_class의 키값들, 위에서도 반복했던 코드
+                for label in seg_classes[cat]: 
                     seg_label_to_cat[label] = cat
 
             for batch_id, (points, label, target) in tqdm(enumerate(testDataLoader), total=len(testDataLoader), smoothing=0.9):
+              #enumerate() 함수는 인자로 넘어온 목록을 기준으로 인덱스와 원소를 차례대로 접근하게 해주는 반복자(iterator) 객체를 반환해주는 함수
                 cur_batch_size, NUM_POINT, _ = points.size()
-                points, label, target = points.float().cuda(), label.long().cuda(), target.long().cuda()
-                points = points.transpose(2, 1)
-                classifier = classifier.eval()
-                seg_pred, _ = classifier(points, to_categorical(label, num_classes))
-                cur_pred_val = seg_pred.cpu().data.numpy()
-                cur_pred_val_logits = cur_pred_val
-                cur_pred_val = np.zeros((cur_batch_size, NUM_POINT)).astype(np.int32)
+                points, label, target = points.float().cuda(), label.long().cuda(), target.long().cuda() #Train위에도 있는 부분
+                points = points.transpose(2, 1)#Train위에도 있는 부분
+                classifier = classifier.eval() #Train 위에는 classifier.train()
+                seg_pred, _ = classifier(points, to_categorical(label, num_classes)) #train부분이랑 다른점  ,_부분 위에는 trans_feat
+                cur_pred_val = seg_pred.cpu().data.numpy()# train 위에는 sum()
+                cur_pred_val_logits = cur_pred_val 
+                cur_pred_val = np.zeros((cur_batch_size, NUM_POINT)).astype(np.int32) #np.zeros=>zeros()함수는 0으로 초기화된 shape 차원의 ndarray 배열 객체를 반환
+                #numpy zeros method는 0으로만 채워진 array를 생성 #astype()로 데이터형 dtype을 변경(타입변경)
                 target = target.cpu().data.numpy()
-                for i in range(cur_batch_size):
+                for i in range(cur_batch_size): #cur_batch_size =points.size()
                     cat = seg_label_to_cat[target[i, 0]]
                     logits = cur_pred_val_logits[i, :, :]
                     cur_pred_val[i, :] = np.argmax(logits[:, seg_classes[cat]], 1) + seg_classes[cat][0]
