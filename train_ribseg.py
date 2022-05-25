@@ -189,14 +189,15 @@ def main(args):
     else: #TMI: Adam이 안되면 SGD 최적화
         optimizer = torch.optim.SGD(classifier.parameters(), lr=args.learning_rate, momentum=0.9)
 
-    def bn_momentum_adjust(m, momentum): #isinstance(확인하고자하는 데이터 값, 확인하고자 하는 데이터 타입)=>isinstance(인스턴스, 데이터나 클래스타입)
+    def bn_momentum_adjust(m, momentum): # 주어진 인스턴스가 특정 클래스/ 데이터 타입인지 검사해주는 함수
+      #isinstance(확인하고자하는 데이터 값, 확인하고자 하는 데이터 타입)=>isinstance(인스턴스, 데이터나 클래스타입)
       #첫번째 매개변수: 확인하고자하는 데이터의 값, 객체, 인스턴스 #두 번째 매개변수 : 확인하고자 하는 데이터타입, 클래스 #반환값: 인스턴스와 타입이 같으면 True 아니면 False
         if isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm1d): # 조건들 중 하나만 True여도 if문 코드가 실행
             m.momentum = momentum
 
-    LEARNING_RATE_CLIP = 1e-5
+    LEARNING_RATE_CLIP = 1e-5 
     MOMENTUM_ORIGINAL = 0.1
-    MOMENTUM_DECCAY = 0.5
+    MOMENTUM_DECCAY = 0.5 #0보다 크거나 같은 float 값. 업데이트마다 적용되는 학습률의 감소율
     MOMENTUM_DECCAY_STEP = args.step_size
 
     best_acc = 0
@@ -205,38 +206,43 @@ def main(args):
     best_inctance_avg_iou = 0
 
     for epoch in range(start_epoch,args.epoch):
-        log_string('Epoch %d (%d/%s):' % (global_epoch + 1, epoch + 1, args.epoch))
+        log_string('Epoch %d (%d/%s):' % (global_epoch + 1, epoch + 1, args.epoch)) #epoch값 출력 시작
         '''Adjust learning rate and BN momentum'''
-        lr = max(args.learning_rate * (args.lr_decay ** (epoch // args.step_size)), LEARNING_RATE_CLIP)
-        log_string('Learning rate:%f' % lr)
-        for param_group in optimizer.param_groups:
+        lr = max(args.learning_rate * (args.lr_decay ** (epoch // args.step_size)), LEARNING_RATE_CLIP) #learning rate 
+        log_string('Learning rate:%f' % lr) #learning rate 값 출력
+        for param_group in optimizer.param_groups: #이 함수를 호출할 때 사용하는 optimizer와 대응하는 epoch를 입력하고 args.lr를 초기화하는 학습율로도 제시
             param_group['lr'] = lr
         mean_correct = []
-        momentum = MOMENTUM_ORIGINAL * (MOMENTUM_DECCAY ** (epoch // MOMENTUM_DECCAY_STEP))
+        momentum = MOMENTUM_ORIGINAL * (MOMENTUM_DECCAY ** (epoch // MOMENTUM_DECCAY_STEP))#momentu=0.1*(0.5제곱)
         if momentum < 0.01:
             momentum = 0.01
         print('BN momentum updated to: %f' % momentum)
-        classifier = classifier.apply(lambda x: bn_momentum_adjust(x,momentum))
+        classifier = classifier.apply(lambda x: bn_momentum_adjust(x,momentum))#lambda()함수는  사용자 정의 함수를 문법에 맞추어 작성하는 것보다 간단하게 해결할 수 있는 함수
+        #dataframe명.apply(lambda x :x['칼럼명']들의 조건식 if x['칼럼명']들의 조건식
 
-        '''learning one epoch'''
+        '''learning one epoch''' 
         for i, data in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             points, label, target = data
             # print(points.shape,label.shape,target.shape)
             points = points.data.numpy()
-            points[:,:, 0:3] = provider.random_scale_point_cloud(points[:,:, 0:3])
-            points[:,:, 0:3] = provider.shift_point_cloud(points[:,:, 0:3])
+            points[:,:, 0:3] = provider.random_scale_point_cloud(points[:,:, 0:3]) # : =모든 성분을 추출 3차원 array[행,열] #provide.py에 함수: random_scale_point_cloud
+            points[:,:, 0:3] = provider.shift_point_cloud(points[:,:, 0:3]) #provide.py에 함수: shift_point_cloud
             points = torch.Tensor(points)
             points, label, target = points.float().cuda(),label.long().cuda(), target.long().cuda()
             points = points.transpose(2, 1)
-            optimizer.zero_grad()
+            optimizer.zero_grad() #pytorch에서는 gradients값들을 추후에 backward를 해줄 때 계속 더해주기 때문에 항상 backpropagation을 하기 전에 gradients를 zero로 만들어주고 시작
             classifier = classifier.train()
             
             # print(points.size())
             # print('label:',label,label.size())
-            a=to_categorical(label, num_classes)
+            a=to_categorical(label, num_classes) #num_classes=16 최종출력 클래스 크기 #to_categorical: one-hot인코딩을 해주는 함수 10진 정수 형식을 특수한 2진 바이너리 형식 변환
+            #to_categorical 함수는 입력받은 n크기의 1차원 정수 배열을 (n,k)2차원 배열로 변경. 이 배열의 두 번째 차원의 인덱스가 클래스값을 의미
             # print('ssss:',a,a.size())
             seg_pred, trans_feat = classifier(points, to_categorical(label, num_classes))
-            seg_pred = seg_pred.contiguous().view(-1, num_part)
+            seg_pred = seg_pred.contiguous().view(-1, num_part) #.contiguous()메서드는 다음과 같이 이러한 a와 같은 비연속적인 텐서를 연속적으로 만들어주는 역할
+            #non-contiguous Tensor 객체의 경우 주소값 연속성이 불변인 것을 해결해주는 contiguous()를 사용하여 새로운 메모리 공간에 데이터를 복사하여 
+            #주소값 연속성을 가변적이게 만들어주는 것.-> contiguous()결과가 원본과 다른 새로운 주소로 할당된것을 확인할 수 있다.
+            #contiguous함수로 새로운 메모리에 할당하여 contiguous Tensor로 변경하면 주소값 재배열이 가능하다.
             # print('seg_pred',seg_pred.shape)
             target = target.view(-1, 1)[:, 0]
             pred_choice = seg_pred.data.max(1)[1]
